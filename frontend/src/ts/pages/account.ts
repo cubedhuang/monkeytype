@@ -16,7 +16,6 @@ import * as Profile from "../elements/profile";
 import format from "date-fns/format";
 
 import type { ScaleChartOptions } from "chart.js";
-import { Auth } from "../firebase";
 
 let filterDebug = false;
 //toggle filterdebug
@@ -744,16 +743,20 @@ function fillContent(): void {
     accountHistoryScaleOptions["wpm"].min = 0;
   }
 
-  if (chartData == [] || chartData.length == 0) {
+  if (!chartData || chartData.length == 0) {
     $(".pageAccount .group.noDataError").removeClass("hidden");
     $(".pageAccount .group.chart").addClass("hidden");
     $(".pageAccount .group.dailyActivityChart").addClass("hidden");
+    $(".pageAccount .group.histogramChart").addClass("hidden");
+    $(".pageAccount .group.aboveHistory").addClass("hidden");
     $(".pageAccount .group.history").addClass("hidden");
     $(".pageAccount .triplegroup.stats").addClass("hidden");
   } else {
     $(".pageAccount .group.noDataError").addClass("hidden");
     $(".pageAccount .group.chart").removeClass("hidden");
     $(".pageAccount .group.dailyActivityChart").removeClass("hidden");
+    $(".pageAccount .group.histogramChart").removeClass("hidden");
+    $(".pageAccount .group.aboveHistory").removeClass("hidden");
     $(".pageAccount .group.history").removeClass("hidden");
     $(".pageAccount .triplegroup.stats").removeClass("hidden");
   }
@@ -887,6 +890,7 @@ function fillContent(): void {
     250,
     async () => {
       // Profile.updateNameFontSize("account");
+      $(".page.pageAccount").css("height", "unset"); //weird safari fix
     },
     async () => {
       setTimeout(() => {
@@ -898,7 +902,6 @@ function fillContent(): void {
 
 export async function downloadResults(): Promise<void> {
   if (DB.getSnapshot().results !== undefined) return;
-  LoadingPage.updateBar(45, true);
   const results = await DB.getUserResults();
   TodayTracker.addAllFromToday();
   if (results) {
@@ -912,6 +915,7 @@ export async function update(): Promise<void> {
     Notifications.add(`Missing account data. Please refresh.`, -1);
     $(".pageAccount .preloader").html("Missing account data. Please refresh.");
   } else {
+    LoadingPage.updateBar(90);
     await downloadResults();
     try {
       fillContent();
@@ -1110,7 +1114,8 @@ $(".pageAccount .content .group.aboveHistory .exportCSV").on("click", () => {
 });
 
 $(document).on("click", ".pageAccount .profile .details .copyLink", () => {
-  const url = `${location.origin}/profile/${Auth.currentUser?.uid}`;
+  const { name } = DB.getSnapshot();
+  const url = `${location.origin}/profile/${name}`;
 
   navigator.clipboard.writeText(url).then(
     function () {
@@ -1131,9 +1136,16 @@ export const page = new Page(
   },
   async () => {
     reset();
+    ResultFilters.removeButtons();
   },
   async () => {
-    await update();
+    ResultFilters.appendButtons();
+    if (DB.getSnapshot().results == undefined) {
+      $(".pageLoading .fill, .pageAccount .fill").css("width", "0%");
+      $(".pageAccount .content").addClass("hidden");
+      $(".pageAccount .preloader").removeClass("hidden");
+    }
+    update();
   },
   async () => {
     //

@@ -100,7 +100,7 @@ export async function update(
   discordId?: string,
   discordAvatar?: string
 ): Promise<void> {
-  if (Auth.currentUser != null) {
+  if (Auth?.currentUser) {
     if (xp !== undefined) {
       $("#top #menu .level").text(Math.floor(Misc.getLevel(xp)));
       $("#top #menu .bar").css({
@@ -461,6 +461,9 @@ async function flashLevel(): Promise<void> {
         },
         duration: 2000,
         easing: "easeOutCubic",
+        complete: () => {
+          barEl.css("background-color", "");
+        },
       }
     );
 }

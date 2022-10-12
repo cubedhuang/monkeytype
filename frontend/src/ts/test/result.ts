@@ -18,10 +18,13 @@ import * as AdController from "../controllers/ad-controller";
 import * as TestConfig from "./test-config";
 import { Chart } from "chart.js";
 import { Auth } from "../firebase";
+import * as SlowTimer from "../states/slow-timer";
 
+// eslint-disable-next-line no-duplicate-imports -- need to ignore because eslint doesnt know what import type is
 import type { PluginChartOptions, ScaleChartOptions } from "chart.js";
 import type { AnnotationOptions } from "chartjs-plugin-annotation";
 import Ape from "../ape";
+import confetti from "canvas-confetti";
 
 let result: MonkeyTypes.Result<MonkeyTypes.Mode>;
 let maxChartVal: number;
@@ -130,7 +133,7 @@ async function updateGraph(): Promise<void> {
 
   resultScaleOptions["wpm"].max = maxChartVal;
   resultScaleOptions["raw"].max = maxChartVal;
-  resultScaleOptions["error"].max = Math.max(...result.chartData.err) + 1;
+  resultScaleOptions["error"].max = Math.max(...result.chartData.err);
 }
 
 export async function updateGraphPBLine(): Promise<void> {
@@ -342,6 +345,38 @@ export function showCrown(): void {
   PbCrown.show();
 }
 
+export function showConfetti(): void {
+  if (SlowTimer.get()) return;
+  const style = getComputedStyle(document.body);
+  const colors = [
+    style.getPropertyValue("--main-color"),
+    style.getPropertyValue("--text-color"),
+    style.getPropertyValue("--sub-color"),
+  ];
+  const duration = Date.now() + 125;
+
+  (function f(): void {
+    confetti({
+      particleCount: 5,
+      angle: 60,
+      spread: 75,
+      origin: { x: 0 },
+      colors: colors,
+    });
+    confetti({
+      particleCount: 5,
+      angle: 120,
+      spread: 75,
+      origin: { x: 1 },
+      colors: colors,
+    });
+
+    if (Date.now() < duration) {
+      requestAnimationFrame(f);
+    }
+  })();
+}
+
 export function hideCrown(): void {
   PbCrown.hide();
   $("#result .stats .wpm .crown").attr("aria-label", "");
@@ -526,18 +561,18 @@ function updateOther(
   }
   if (TestStats.invalid) {
     otherText += "<br>invalid";
-    let extra = "";
+    const extra: string[] = [];
     if (result.wpm < 0 || result.wpm > 350) {
-      extra += "wpm";
+      extra.push("wpm");
+    }
+    if (result.rawWpm < 0 || result.rawWpm > 350) {
+      extra.push("raw");
     }
     if (result.acc < 75 || result.acc > 100) {
-      if (extra.length > 0) {
-        extra += ", ";
-      }
-      extra += "accuracy";
+      extra.push("accuracy");
     }
     if (extra.length > 0) {
-      otherText += ` (${extra})`;
+      otherText += ` (${extra.join(",")})`;
     }
   }
   if (isRepeated) {
@@ -586,7 +621,7 @@ function updateQuoteFavorite(randomQuote: MonkeyTypes.Quote): void {
 
   const icon = $(".pageTest #result #favoriteQuoteButton .icon");
 
-  if (Config.mode === "quote" && Auth.currentUser) {
+  if (Config.mode === "quote" && Auth?.currentUser) {
     const userFav = QuotesController.isQuoteFavorite(randomQuote);
 
     icon.removeClass(userFav ? "far" : "fas").addClass(userFav ? "fas" : "far");
@@ -631,7 +666,7 @@ export async function update(
   $("#words").removeClass("blurred");
   $("#wordsInput").blur();
   $("#result .stats .time .bottom .afk").text("");
-  if (Auth.currentUser != null) {
+  if (Auth?.currentUser) {
     $("#result .loginTip").addClass("hidden");
   } else {
     $("#result .loginTip").removeClass("hidden");
@@ -698,7 +733,7 @@ export async function update(
     $("#middle #result .stats").removeClass("hidden");
     $("#middle #result .chart").removeClass("hidden");
     // $("#middle #result #resultWordsHistory").removeClass("hidden");
-    if (Auth.currentUser == null) {
+    if (!Auth?.currentUser) {
       $("#middle #result .loginTip").removeClass("hidden");
     }
     $("#middle #result #showWordHistoryButton").removeClass("hidden");

@@ -48,6 +48,7 @@ import * as ConfigEvent from "../observables/config-event";
 import format from "date-fns/format";
 import "chartjs-adapter-date-fns";
 
+// eslint-disable-next-line no-duplicate-imports -- need to ignore because eslint doesnt know what import type is
 import type {
   AnimationSpec,
   CartesianScaleOptions,
@@ -59,6 +60,7 @@ import type {
   ScaleChartOptions,
 } from "chart.js";
 
+// eslint-disable-next-line no-duplicate-imports -- need to ignore because eslint doesnt know what import type is
 import type {
   AnnotationOptions,
   LabelOptions,
@@ -88,6 +90,8 @@ export const result: ChartWithUpdateColors<
     labels: [],
     datasets: [
       {
+        //@ts-ignore the type is defined incorrectly, have to ingore the error
+        clip: false,
         label: "wpm",
         data: [],
         borderColor: "rgba(125, 125, 125, 1)",
@@ -97,6 +101,8 @@ export const result: ChartWithUpdateColors<
         pointRadius: 2,
       },
       {
+        //@ts-ignore the type is defined incorrectly, have to ingore the error
+        clip: false,
         label: "raw",
         data: [],
         borderColor: "rgba(125, 125, 125, 1)",
@@ -106,6 +112,8 @@ export const result: ChartWithUpdateColors<
         pointRadius: 2,
       },
       {
+        //@ts-ignore the type is defined incorrectly, have to ingore the error
+        clip: false,
         label: "errors",
         data: [],
         borderColor: "rgba(255, 125, 125, 1)",
@@ -129,11 +137,6 @@ export const result: ChartWithUpdateColors<
     ],
   },
   options: {
-    layout: {
-      padding: {
-        top: 2,
-      },
-    },
     responsive: true,
     maintainAspectRatio: false,
     scales: {

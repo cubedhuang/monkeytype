@@ -28,7 +28,8 @@ import * as CompositionState from "../states/composition";
 import * as TestInput from "../test/test-input";
 import * as TestWords from "../test/test-words";
 import * as Hangul from "hangul-js";
-import { navigate } from "./route-controller";
+import * as CustomTextState from "../states/custom-text-name";
+import { navigate } from "../observables/navigate-event";
 
 let dontInsertSpace = false;
 let correctShiftUsed = true;
@@ -123,6 +124,7 @@ function backspaceToPrevious(): void {
   TestInput.corrected.popHistory();
   if (Config.funbox === "nospace" || Config.funbox === "arrows") {
     TestInput.input.current = TestInput.input.current.slice(0, -1);
+    setWordsInput(" " + TestInput.input.current + " ");
   }
   TestWords.words.decreaseCurrentIndex();
   TestUI.setCurrentWordElementIndex(TestUI.currentWordElementIndex - 1);
@@ -490,8 +492,9 @@ function handleChar(
   // If a trailing composed char is used, ignore it when counting accuracy
   if (
     !thisCharCorrect &&
-    Misc.trailingComposeChars.test(resultingWord) &&
-    CompositionState.getComposing()
+    // Misc.trailingComposeChars.test(resultingWord) &&
+    CompositionState.getComposing() &&
+    !Config.language.startsWith("korean")
   ) {
     TestInput.input.current = resultingWord;
     TestUI.updateWordElement();
@@ -602,6 +605,7 @@ function handleChar(
     if (
       (currentWord === TestInput.input.current ||
         (Config.quickEnd &&
+          !Config.language.startsWith("korean") &&
           currentWord.length === TestInput.input.current.length &&
           Config.stopOnError == "off")) &&
       lastIndex === TestWords.words.length - 1
@@ -875,6 +879,13 @@ $(document).keydown(async (event) => {
       event.shiftKey &&
       ((Config.mode == "time" && Config.time === 0) ||
         (Config.mode == "words" && Config.words === 0))
+    ) {
+      TestInput.setBailout(true);
+      TestLogic.finish();
+    } else if (
+      event.shiftKey &&
+      Config.mode == "custom" &&
+      CustomTextState.isCustomTextLong() === true
     ) {
       TestInput.setBailout(true);
       TestLogic.finish();

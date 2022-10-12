@@ -87,12 +87,28 @@ declare namespace MonkeyTypes {
     5 = typewriter
     6 = osu
     7 = hitmarker
+    8 = sine
+    9 = sawtooth
+    10 = square
+    11 = triangle
   */
-  type PlaySoundOnClick = "off" | "1" | "2" | "3" | "4" | "5" | "6" | "7";
+  type PlaySoundOnClick =
+    | "off"
+    | "1"
+    | "2"
+    | "3"
+    | "4"
+    | "5"
+    | "6"
+    | "7"
+    | "8"
+    | "9"
+    | "10"
+    | "11";
 
   type SoundVolume = "0.1" | "0.5" | "1.0";
 
-  type PaceCaret = "off" | "average" | "pb" | "last" | "custom";
+  type PaceCaret = "off" | "average" | "pb" | "last" | "custom" | "daily";
 
   type PageWidth = "100" | "125" | "150" | "200" | "max";
 
@@ -160,6 +176,11 @@ declare namespace MonkeyTypes {
     x: number;
     y: number;
     amount?: number;
+  }
+
+  interface FontObject {
+    name: string;
+    display?: string;
   }
 
   interface FunboxObject {
@@ -647,7 +668,7 @@ declare namespace MonkeyTypes {
   interface Command {
     id: string;
     display: string;
-    subgroup?: CommandsGroup | boolean;
+    subgroup?: CommandsSubgroup;
     found?: boolean;
     icon?: string;
     noIcon?: boolean;
@@ -655,7 +676,7 @@ declare namespace MonkeyTypes {
     alias?: string;
     input?: boolean;
     visible?: boolean;
-    defaultValue?: string;
+    defaultValue?: () => string;
     configValue?: string | number | boolean | number[];
     configValueMode?: string;
     exec?: (input?: string) => void;
@@ -665,10 +686,16 @@ declare namespace MonkeyTypes {
     shouldFocusTestUI?: boolean;
   }
 
-  interface CommandsGroup {
+  interface CommandsSubgroup {
     title: string;
     configKey?: keyof Config;
     list: Command[];
+  }
+
+  interface Theme {
+    name: string;
+    bgColor: string;
+    mainColor: string;
   }
 
   interface Quote {

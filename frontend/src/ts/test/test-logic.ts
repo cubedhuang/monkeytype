@@ -6,6 +6,7 @@ import * as Misc from "../utils/misc";
 import QuotesController from "../controllers/quotes-controller";
 import * as Notifications from "../elements/notifications";
 import * as CustomText from "./custom-text";
+import * as CustomTextState from "../states/custom-text-name";
 import * as TestStats from "./test-stats";
 import * as PractiseWords from "./practise-words";
 import * as ShiftTracker from "./shift-tracker";
@@ -327,7 +328,7 @@ export function startTest(): boolean {
     UpdateConfig.setChangedBeforeDb(true);
   }
 
-  if (Auth.currentUser !== null) {
+  if (Auth?.currentUser) {
     AnalyticsController.log("testStarted");
   } else {
     AnalyticsController.log("testStartedNoLogin");
@@ -409,7 +410,8 @@ export function restart(options = {} as RestartOptions): void {
           Config.mode,
           Config.words,
           Config.time,
-          CustomText
+          CustomText,
+          CustomTextState.isCustomTextLong() ?? false
         )
       ) {
         let message = "Use your mouse to confirm.";
@@ -697,6 +699,7 @@ export function restart(options = {} as RestartOptions): void {
       });
       // resetPaceCaret();
       ModesNotice.update();
+      ManualRestart.reset();
       $("#typingTest")
         .css("opacity", 0)
         .removeClass("hidden")
@@ -876,7 +879,7 @@ export async function init(): Promise<void> {
     await Funbox.activate();
   }
 
-  if (Config.quoteLength.includes(-3) && !Auth.currentUser) {
+  if (Config.quoteLength.includes(-3) && !Auth?.currentUser) {
     UpdateConfig.setQuoteLength(-1);
   }
 
@@ -888,6 +891,13 @@ export async function init(): Promise<void> {
   if (!language) {
     UpdateConfig.setLanguage("english");
     language = await Misc.getLanguage(Config.language);
+  }
+
+  if (Config.mode === "quote") {
+    const group = await Misc.findCurrentGroup(Config.language);
+    if (group && group.name !== Config.language) {
+      UpdateConfig.setLanguage(group.name);
+    }
   }
 
   if (Config.lazyMode === true && language.noLazyMode) {
@@ -903,7 +913,17 @@ export async function init(): Promise<void> {
   }
 
   let wordsBound = 100;
-  if (Config.showAllLines) {
+  if (Config.funbox === "plus_one") {
+    wordsBound = 2;
+    if (Config.mode === "words" && Config.words < wordsBound) {
+      wordsBound = Config.words;
+    }
+  } else if (Config.funbox === "plus_two") {
+    wordsBound = 3;
+    if (Config.mode === "words" && Config.words < wordsBound) {
+      wordsBound = Config.words;
+    }
+  } else if (Config.showAllLines) {
     if (Config.mode === "quote") {
       wordsBound = 100;
     } else if (Config.mode === "custom") {
@@ -954,18 +974,6 @@ export async function init(): Promise<void> {
 
   if (Config.mode === "words" && Config.words === 0) {
     wordsBound = 100;
-  }
-  if (Config.funbox === "plus_one") {
-    wordsBound = 2;
-    if (Config.mode === "words" && Config.words < wordsBound) {
-      wordsBound = Config.words;
-    }
-  }
-  if (Config.funbox === "plus_two") {
-    wordsBound = 3;
-    if (Config.mode === "words" && Config.words < wordsBound) {
-      wordsBound = Config.words;
-    }
   }
 
   if (
@@ -1070,7 +1078,7 @@ export async function init(): Promise<void> {
           .replace(/_/g, " ")} quotes found`,
         0
       );
-      if (Auth.currentUser) {
+      if (Auth?.currentUser) {
         QuoteSubmitPopup.show(false);
       }
       UpdateConfig.setMode("words");
@@ -1132,11 +1140,7 @@ export async function init(): Promise<void> {
 
     if (w === undefined) return;
 
-    if (Config.showAllLines) {
-      wordsBound = w.length;
-    } else {
-      wordsBound = Math.min(wordsBound, w.length);
-    }
+    wordsBound = Math.min(wordsBound, w.length);
 
     for (let i = 0; i < wordsBound; i++) {
       if (/\t/g.test(w[i])) {
@@ -1421,13 +1425,15 @@ function buildCompletedEvent(difficultyFailed: boolean): CompletedEvent {
   const stddev2 = Misc.stdDev(smoothedraw);
   const avg2 = Misc.mean(smoothedraw);
   const smoothConsistency = Misc.roundTo2(Misc.kogasa(stddev2 / avg2));
-  completedEvent.smoothConsistency = smoothConsistency;
+  completedEvent.smoothConsistency = isNaN(smoothConsistency)
+    ? 0
+    : smoothConsistency;
 
   //wpm consistency
   const stddev3 = Misc.stdDev(completedEvent.chartData.wpm ?? []);
   const avg3 = Misc.mean(completedEvent.chartData.wpm ?? []);
   const wpmConsistency = Misc.roundTo2(Misc.kogasa(stddev3 / avg3));
-  completedEvent.wpmConsistency = wpmConsistency;
+  completedEvent.wpmConsistency = isNaN(wpmConsistency) ? 0 : wpmConsistency;
 
   completedEvent.testDuration = parseFloat(stats.time.toString());
   completedEvent.afkDuration = TestStats.calculateAfkSeconds(
@@ -1517,7 +1523,9 @@ export async function finish(difficultyFailed = false): Promise<void> {
   const completedEvent = buildCompletedEvent(difficultyFailed);
 
   function countUndefined(input: unknown): number {
-    if (typeof input === "undefined") {
+    if (typeof input === "number") {
+      return isNaN(input) ? 1 : 0;
+    } else if (typeof input === "undefined") {
       return 1;
     } else if (typeof input === "object" && input !== null) {
       return Object.values(input).reduce(
@@ -1529,13 +1537,15 @@ export async function finish(difficultyFailed = false): Promise<void> {
     }
   }
 
+  let dontSave = false;
+
   if (countUndefined(completedEvent) > 0) {
     console.log(completedEvent);
     Notifications.add(
-      "Failed to save result: One of the result fields is undefined. Please report this",
+      "Failed to build result object: One of the fields is undefined or NaN",
       -1
     );
-    return;
+    dontSave = true;
   }
 
   ///////// completed event ready
@@ -1546,7 +1556,6 @@ export async function finish(difficultyFailed = false): Promise<void> {
   if (TestInput.bailout) afkDetected = false;
 
   let tooShort = false;
-  let dontSave = false;
   //fail checks
   if (difficultyFailed) {
     Notifications.add(`Test failed - ${failReason}`, 0, 1);
@@ -1591,6 +1600,10 @@ export async function finish(difficultyFailed = false): Promise<void> {
     Notifications.add("Test invalid - wpm", 0);
     TestStats.setInvalid();
     dontSave = true;
+  } else if (completedEvent.rawWpm < 0 || completedEvent.rawWpm > 350) {
+    Notifications.add("Test invalid - raw", 0);
+    TestStats.setInvalid();
+    dontSave = true;
   } else if (completedEvent.acc < 75 || completedEvent.acc > 100) {
     Notifications.add("Test invalid - accuracy", 0);
     TestStats.setInvalid();
@@ -1598,6 +1611,29 @@ export async function finish(difficultyFailed = false): Promise<void> {
   }
 
   // test is valid
+
+  const customTextName = CustomTextState.getCustomTextName();
+  const isLong = CustomTextState.isCustomTextLong();
+  if (Config.mode === "custom" && customTextName !== "" && isLong) {
+    // Let's update the custom text progress
+    if (TestInput.bailout) {
+      // They bailed out
+      const newProgress =
+        CustomText.getCustomTextLongProgress(customTextName) +
+        TestInput.input.getHistory().length;
+      CustomText.setCustomTextLongProgress(customTextName, newProgress);
+      Notifications.add("Long custom text progress saved", 1, 5);
+
+      let newText = CustomText.getCustomText(customTextName, true);
+      newText = newText.slice(newProgress);
+      CustomText.setText(newText);
+    } else {
+      // They finished the test
+      CustomText.setCustomTextLongProgress(customTextName, 0);
+      CustomText.setText(CustomText.getCustomText(customTextName, true));
+      Notifications.add("Long custom text completed", 1, 5);
+    }
+  }
 
   if (!dontSave) {
     TodayTracker.addSeconds(
@@ -1610,7 +1646,7 @@ export async function finish(difficultyFailed = false): Promise<void> {
     Result.updateTodayTracker();
   }
 
-  if (Auth.currentUser == null) {
+  if (!Auth?.currentUser) {
     $(".pageTest #result #rateQuoteButton").addClass("hidden");
     $(".pageTest #result #reportQuoteButton").addClass("hidden");
     AnalyticsController.log("testCompletedNoLogin");
@@ -1661,11 +1697,14 @@ export async function finish(difficultyFailed = false): Promise<void> {
     TestStats.resetIncomplete();
   }
 
-  completedEvent.uid = Auth.currentUser?.uid as string;
+  completedEvent.uid = Auth?.currentUser?.uid as string;
   Result.updateRateQuote(TestWords.randomQuote);
 
   AccountButton.loading(true);
-  completedEvent.challenge = ChallengeContoller.verify(completedEvent);
+  if (completedEvent.bailedOut !== true) {
+    completedEvent.challenge = ChallengeContoller.verify(completedEvent);
+  }
+
   if (completedEvent.challenge === null) delete completedEvent?.challenge;
 
   completedEvent.hash = objectHash(completedEvent);
@@ -1701,7 +1740,7 @@ async function saveResult(
     return Notifications.add("Failed to save result: " + response.message, -1);
   }
 
-  if (response.data.xp) {
+  if (response?.data?.xp) {
     const snapxp = DB.getSnapshot().xp;
     AccountButton.updateXpBar(
       snapxp,
@@ -1711,27 +1750,33 @@ async function saveResult(
     DB.addXp(response.data.xp);
   }
 
-  if (response.data.streak) {
+  if (response?.data?.streak) {
     DB.setStreak(response.data.streak);
   }
 
-  completedEvent._id = response.data.insertedId;
-  if (response.data.isPb) {
-    completedEvent.isPb = true;
+  if (response?.data?.insertedId) {
+    completedEvent._id = response.data.insertedId;
+    if (response?.data?.isPb) {
+      completedEvent.isPb = true;
+    }
+    DB.saveLocalResult(completedEvent);
+    DB.updateLocalStats(
+      TestStats.restartCount + 1,
+      completedEvent.testDuration +
+        completedEvent.incompleteTestSeconds -
+        completedEvent.afkDuration
+    );
   }
-
-  DB.saveLocalResult(completedEvent);
-  DB.updateLocalStats(
-    TestStats.restartCount + 1,
-    completedEvent.testDuration +
-      completedEvent.incompleteTestSeconds -
-      completedEvent.afkDuration
-  );
 
   AnalyticsController.log("testCompleted");
 
-  if (response.data.isPb) {
+  if (response?.data?.isPb) {
     //new pb
+    if (
+      DB.getSnapshot()?.personalBests?.[Config.mode]?.[completedEvent.mode2]
+    ) {
+      Result.showConfetti();
+    }
     Result.showCrown();
     Result.updateCrown();
     DB.saveLocalPB(
@@ -1759,7 +1804,7 @@ async function saveResult(
   //   );
   // }
 
-  if (!response.data.dailyLeaderboardRank) {
+  if (!response?.data?.dailyLeaderboardRank) {
     $("#result .stats .dailyLeaderboard").addClass("hidden");
   } else {
     $("#result .stats .dailyLeaderboard")
